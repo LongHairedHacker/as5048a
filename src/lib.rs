@@ -8,6 +8,7 @@
 #![no_std]
 
 use core::fmt;
+use core::marker::PhantomData;
 
 use embedded_hal as hal;
 use hal::blocking::spi::Transfer;
@@ -52,7 +53,7 @@ enum Register {
 
 /// AS5048A driver
 pub struct AS5048A<SPI, CS> {
-    spi: SPI,
+    spi: PhantomData<SPI>,
     cs: CS,
 }
 
@@ -61,26 +62,29 @@ where
     SPI: Transfer<u8, Error = E>,
     CS: OutputPin,
 {
-    pub fn new(spi: SPI, cs: CS) -> Self {
-        Self { spi, cs }
+    pub fn new(cs: CS) -> Self {
+        Self {
+            spi: PhantomData,
+            cs: cs,
+        }
     }
 
-    pub fn diag_gain(&mut self) -> Result<(u8, u8), Error<SPI, CS>> {
-        self.read(Register::DiagAgc)
+    pub fn diag_gain(&mut self, spi: &mut SPI) -> Result<(u8, u8), Error<SPI, CS>> {
+        self.read(spi, Register::DiagAgc)
             .map(|arr| (arr[0] & 0x0f, arr[1]))
     }
 
-    pub fn magnitude(&mut self) -> Result<u16, Error<SPI, CS>> {
-        self.read_u16(Register::Magnitude)
+    pub fn magnitude(&mut self, spi: &mut SPI) -> Result<u16, Error<SPI, CS>> {
+        self.read_u16(spi, Register::Magnitude)
     }
 
     /// Read the rotation angle as u16 (only 14 bits are significant)
-    pub fn angle(&mut self) -> Result<u16, Error<SPI, CS>> {
-        self.read_u16(Register::Angle)
+    pub fn angle(&mut self, spi: &mut SPI) -> Result<u16, Error<SPI, CS>> {
+        self.read_u16(spi, Register::Angle)
     }
 
-    fn read_u16(&mut self, reg: Register) -> Result<u16, Error<SPI, CS>> {
-        match self.read(reg) {
+    fn read_u16(&mut self, spi: &mut SPI, reg: Register) -> Result<u16, Error<SPI, CS>> {
+        match self.read(spi, reg) {
             Ok(arr) => {
                 let y = u16::from_be_bytes(arr);
                 Ok(y & 0b0011_1111_1111_1111)
@@ -89,7 +93,7 @@ where
         }
     }
 
-    fn read(&mut self, reg: Register) -> Result<[u8; 2], Error<SPI, CS>> {
+    fn read(&mut self, spi: &mut SPI, reg: Register) -> Result<[u8; 2], Error<SPI, CS>> {
         // send cmd
         let mut cmd: u16 = 0b_0100_0000_0000_0000;
         cmd |= reg as u16;
@@ -98,13 +102,13 @@ where
         let mut bytes = cmd.to_be_bytes();
 
         self.cs.set_low().map_err(Error::ChipSelect)?;
-        self.spi.transfer(&mut bytes).map_err(Error::Spi)?;
+        spi.transfer(&mut bytes).map_err(Error::Spi)?;
         self.cs.set_high().map_err(Error::ChipSelect)?;
 
         // send nop to get result back
         let mut nop = [0x00, 0x00];
         self.cs.set_low().map_err(Error::ChipSelect)?;
-        self.spi.transfer(&mut nop).map_err(Error::Spi)?;
+        spi.transfer(&mut nop).map_err(Error::Spi)?;
         self.cs.set_high().map_err(Error::ChipSelect)?;
 
         Ok(nop)

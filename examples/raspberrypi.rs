@@ -29,16 +29,16 @@ fn main() -> Result<(), std::io::Error> {
     ncs.set_direction(Direction::Out).unwrap();
     ncs.set_value(1).unwrap();
 
-    let mut as5048 = AS5048A::new(spi, ncs);
+    let mut as5048 = AS5048A::new(ncs);
 
     println!("AS5048A Example");
     loop {
         println!("-------------------------------------------------------------------------");
 
-        let (diag, gain) = as5048.diag_gain().unwrap();
+        let (diag, gain) = as5048.diag_gain(&mut spi).unwrap();
         println!("diag: {:08b} gain: {}", diag, gain);
-        println!("magnitude: {:?}", as5048.magnitude());
-        println!("angle: {:?}", as5048.angle());
+        println!("magnitude: {:?}", as5048.magnitude(&mut spi));
+        println!("angle: {:?}", as5048.angle(&mut spi));
         thread::sleep(Duration::from_millis(1000));
     }
 }
