@@ -11,13 +11,13 @@ use core::fmt;
 use core::marker::PhantomData;
 
 use embedded_hal as hal;
-use hal::blocking::spi::Transfer;
-use hal::digital::v2::OutputPin;
+use hal::digital::OutputPin;
+use hal::spi::SpiBus;
 
 /// Error
 pub enum Error<SPI, CS>
 where
-    SPI: Transfer<u8>,
+    SPI: SpiBus<u8>,
     CS: OutputPin,
 {
     Spi(SPI::Error),
@@ -26,10 +26,8 @@ where
 
 impl<SPI, CS> fmt::Debug for Error<SPI, CS>
 where
-    SPI: Transfer<u8>,
-    <SPI as Transfer<u8>>::Error: fmt::Debug,
+    SPI: SpiBus<u8>,
     CS: OutputPin,
-    <CS as OutputPin>::Error: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -59,7 +57,7 @@ pub struct AS5048A<SPI, CS> {
 
 impl<SPI, CS, E> AS5048A<SPI, CS>
 where
-    SPI: Transfer<u8, Error = E>,
+    SPI: SpiBus<u8, Error = E>,
     CS: OutputPin,
 {
     pub fn new(cs: CS) -> Self {
@@ -102,13 +100,13 @@ where
         let mut bytes = cmd.to_be_bytes();
 
         self.cs.set_low().map_err(Error::ChipSelect)?;
-        spi.transfer(&mut bytes).map_err(Error::Spi)?;
+        spi.transfer_in_place(&mut bytes).map_err(Error::Spi)?;
         self.cs.set_high().map_err(Error::ChipSelect)?;
 
         // send nop to get result back
         let mut nop = [0x00, 0x00];
         self.cs.set_low().map_err(Error::ChipSelect)?;
-        spi.transfer(&mut nop).map_err(Error::Spi)?;
+        spi.transfer_in_place(&mut nop).map_err(Error::Spi)?;
         self.cs.set_high().map_err(Error::ChipSelect)?;
 
         Ok(nop)
